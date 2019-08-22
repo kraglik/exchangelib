@@ -22,7 +22,7 @@ from oauthlib.oauth2 import BackendApplicationClient
 from requests_oauthlib import OAuth2Session
 from six import string_types
 
-from .credentials import BaseCredentials, OAuth2Credentials
+from .credentials import OAuth2Credentials
 from .errors import TransportError, SessionPoolMinSizeReached
 from .properties import FreeBusyViewOptions, MailboxData, TimeWindow, TimeZone
 from .services import GetServerTimeZones, GetRoomLists, GetRooms, ResolveNames, GetUserAvailability, \
