@@ -68,7 +68,8 @@ class Credentials(BaseCredentials, PickleMixIn):
         return self.username
 
 
-class OAuth2Credentials(PickleMixIn):
+@python_2_unicode_compatible
+class Oauth2Credentials(BaseCredentials, PickleMixIn):
     """Login info for OAuth 2.0 authentication
     """
     __slots__ = ('client_id', 'client_secret', 'tenant_id')
