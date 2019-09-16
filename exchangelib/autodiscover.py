@@ -181,7 +181,7 @@ def close_connections():
     _autodiscover_cache.close()
 
 
-def discover(email, credentials=None, auth_type=None, retry_policy=None):
+def discover(email, credentials=None, auth_type=None, retry_policy=None, verify=True):
     """
     Performs the autodiscover dance and returns the primary SMTP address of the account and a Protocol on success. The
     autodiscover and EWS server might not be the same, so we use a different Protocol to do the autodiscover request,
@@ -229,7 +229,7 @@ def discover(email, credentials=None, auth_type=None, retry_policy=None):
             try:
                 # This eventually fills the cache in _autodiscover_hostname
                 return _try_autodiscover(hostname=domain, credentials=credentials, email=email,
-                                         auth_type=auth_type, retry_policy=retry_policy)
+                                         auth_type=auth_type, retry_policy=retry_policy, verify=verify)
             except AutoDiscoverRedirect as e:
                 if email.lower() == e.redirect_email.lower():
                     raise_from(AutoDiscoverCircularRedirect('Redirect to same email address: %s' % email), None)
@@ -239,15 +239,15 @@ def discover(email, credentials=None, auth_type=None, retry_policy=None):
     log.debug('Released autodiscover_cache_lock')
     # We fell out of the with statement, so either cache was filled by someone else, or autodiscover redirected us to
     # another email address. Start over after releasing the lock.
-    return discover(email=email, credentials=credentials, auth_type=auth_type, retry_policy=retry_policy)
+    return discover(email=email, credentials=credentials, auth_type=auth_type, retry_policy=retry_policy, verify=verify)
 
 
-def _try_autodiscover(hostname, credentials, email, auth_type, retry_policy):
+def _try_autodiscover(hostname, credentials, email, auth_type, retry_policy, verify=True):
     # Implements the full chain of autodiscover server discovery attempts. Tries to return autodiscover data from the
     # final host.
     try:
         return _autodiscover_hostname(hostname=hostname, credentials=credentials, email=email, has_ssl=True,
-                                      auth_type=auth_type, retry_policy=retry_policy)
+                                      auth_type=auth_type, retry_policy=retry_policy, verify=verify)
     except RedirectError as e:
         if not e.has_ssl:
             raise_from(AutoDiscoverFailed(
@@ -255,12 +255,12 @@ def _try_autodiscover(hostname, credentials, email, auth_type, retry_policy):
             ), None)
         log.info('%s redirected us to %s', hostname, e.server)
         return _try_autodiscover(hostname=e.server, credentials=credentials, email=email, auth_type=auth_type,
-                                 retry_policy=retry_policy)
+                                 retry_policy=retry_policy, verify=verify)
     except AutoDiscoverFailed as e:
         log.info('Autodiscover on %s failed (%s). Trying autodiscover.%s', hostname, e, hostname)
         try:
             return _autodiscover_hostname(hostname='autodiscover.%s' % hostname, credentials=credentials, email=email,
-                                          has_ssl=True, auth_type=auth_type, retry_policy=retry_policy)
+                                          has_ssl=True, auth_type=auth_type, retry_policy=retry_policy, verify=verify)
         except RedirectError as e:
             if not e.has_ssl:
                 raise_from(AutoDiscoverFailed(
@@ -268,13 +268,13 @@ def _try_autodiscover(hostname, credentials, email, auth_type, retry_policy):
                 ), None)
             log.info('%s redirected us to %s', hostname, e.server)
             return _try_autodiscover(hostname=e.server, credentials=credentials, email=email,
-                                     auth_type=auth_type, retry_policy=retry_policy)
+                                     auth_type=auth_type, retry_policy=retry_policy, verify=verify)
         except AutoDiscoverFailed:
             log.info('Autodiscover on %s failed (%s). Trying autodiscover.%s (plain HTTP)', hostname, e, hostname)
             try:
                 return _autodiscover_hostname(hostname='autodiscover.%s' % hostname, credentials=credentials,
                                               email=email, has_ssl=False, auth_type=auth_type,
-                                              retry_policy=retry_policy)
+                                              retry_policy=retry_policy, verify=verify)
             except RedirectError as e:
                 if not e.has_ssl:
                     raise_from(AutoDiscoverFailed(
@@ -282,7 +282,7 @@ def _try_autodiscover(hostname, credentials, email, auth_type, retry_policy):
                     ), None)
                 log.info('autodiscover.%s redirected us to %s', hostname, e.server)
                 return _try_autodiscover(hostname=e.server, credentials=credentials, email=email,
-                                         auth_type=auth_type, retry_policy=retry_policy)
+                                         auth_type=auth_type, retry_policy=retry_policy, verify=verify)
             except AutoDiscoverFailed as e:
                 log.info('Autodiscover on autodiscover.%s (no TLS) failed (%s). Trying DNS records', hostname, e)
                 hostname_from_dns = _get_canonical_name(hostname='autodiscover.%s' % hostname)
@@ -292,7 +292,7 @@ def _try_autodiscover(hostname, credentials, email, auth_type, retry_policy):
                         hostname_from_dns = _get_hostname_from_srv(hostname='autodiscover.%s' % hostname)
                     # Start over with new hostname
                     return _try_autodiscover(hostname=hostname_from_dns, credentials=credentials, email=email,
-                                             auth_type=auth_type, retry_policy=retry_policy)
+                                             auth_type=auth_type, retry_policy=retry_policy, verify=verify)
                 except AutoDiscoverFailed as e:
                     log.info('Autodiscover on %s failed (%s). Trying _autodiscover._tcp.%s', hostname_from_dns, e,
                              hostname)
@@ -300,16 +300,16 @@ def _try_autodiscover(hostname, credentials, email, auth_type, retry_policy):
                     try:
                         hostname_from_dns = _get_hostname_from_srv(hostname='_autodiscover._tcp.%s' % hostname)
                         return _try_autodiscover(hostname=hostname_from_dns, credentials=credentials, email=email,
-                                                 auth_type=auth_type, retry_policy=retry_policy)
+                                                 auth_type=auth_type, retry_policy=retry_policy, verify=verify)
                     except AutoDiscoverFailed:
                         raise_from(AutoDiscoverFailed('All steps in the autodiscover protocol failed'), None)
 
 
-def _get_auth_type_or_raise(url, email, hostname):
+def _get_auth_type_or_raise(url, email, hostname, verify=True):
     # Returns the auth type of the URL. Raises any redirection errors. This tests host DNS, port availability, and TLS
     # validation (if applicable).
     try:
-        return _get_auth_type(url=url, email=email)
+        return _get_auth_type(url=url, email=email, verify=verify)
     except RedirectError as e:
         redirect_url, redirect_hostname, redirect_has_ssl = e.url, e.server, e.has_ssl
         log.debug('We were redirected to %s', redirect_url)
@@ -328,13 +328,13 @@ def _get_auth_type_or_raise(url, email, hostname):
         raise_from(RedirectError(url='%s://%s' % ('https' if redirect_has_ssl else 'http', redirect_hostname)), None)
 
 
-def _autodiscover_hostname(hostname, credentials, email, has_ssl, auth_type, retry_policy):
+def _autodiscover_hostname(hostname, credentials, email, has_ssl, auth_type, retry_policy, verify=True):
     # Tries to get autodiscover data on a specific host. If we are HTTP redirected, we restart the autodiscover dance on
     # the new host.
     url = '%s://%s/Autodiscover/Autodiscover.xml' % ('https' if has_ssl else 'http', hostname)
     log.info('Trying autodiscover on %s', url)
     if auth_type is None:
-        auth_type = _get_auth_type_or_raise(url=url, email=email, hostname=hostname)
+        auth_type = _get_auth_type_or_raise(url=url, email=email, hostname=hostname, verify=verify)
     autodiscover_protocol = AutodiscoverProtocol(config=Configuration(
         service_endpoint=url, credentials=credentials, auth_type=auth_type, retry_policy=retry_policy
     ))
@@ -386,10 +386,10 @@ def _get_payload(email):
     return xml_to_str(payload, encoding=DEFAULT_ENCODING, xml_declaration=True)
 
 
-def _get_auth_type(url, email):
+def _get_auth_type(url, email, verify=True):
     try:
         data = _get_payload(email=email)
-        return transport.get_autodiscover_authtype(service_endpoint=url, data=data)
+        return transport.get_autodiscover_authtype(service_endpoint=url, data=data, verify=verify)
     except TransportError as e:
         if isinstance(e, RedirectError):
             raise
@@ -408,7 +408,8 @@ def _get_response(protocol, email):
         # redirects depending on the POST data content.
         session = protocol.get_session()
         r, session = post_ratelimited(protocol=protocol, session=session, url=protocol.service_endpoint,
-                                      headers=DEFAULT_HEADERS.copy(), data=data, allow_redirects=True)
+                                      headers=DEFAULT_HEADERS.copy(), data=data, allow_redirects=True,
+                                      verify=protocol.config.verify)
         protocol.release_session(session)
         log.debug('Response headers: %s', r.headers)
     except RedirectError:

@@ -41,7 +41,7 @@ class Account(object):
     """Models an Exchange server user account. The primary key for an account is its PrimarySMTPAddress
     """
     def __init__(self, primary_smtp_address, fullname=None, access_type=None, autodiscover=False, credentials=None,
-                 config=None, locale=None, default_timezone=None):
+                 config=None, locale=None, default_timezone=None, verify=True):
         """
         :param primary_smtp_address: The primary email address associated with the account on the Exchange server
         :param fullname: The full name of the account. Optional.
@@ -89,7 +89,8 @@ class Account(object):
             else:
                 retry_policy, auth_type = None, None
             self.primary_smtp_address, self.protocol = discover(
-                email=self.primary_smtp_address, credentials=credentials, auth_type=auth_type, retry_policy=retry_policy
+                email=self.primary_smtp_address, credentials=credentials, auth_type=auth_type, retry_policy=retry_policy,
+                verify=verify
             )
         else:
             if not config:

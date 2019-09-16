@@ -39,7 +39,7 @@ class Configuration(object):
 
     """
     def __init__(self, credentials=None, server=None, service_endpoint=None, auth_type=None, version=None,
-                 retry_policy=None):
+                 retry_policy=None, verify=True):
         if not isinstance(credentials, (BaseCredentials, type(None))):
             raise ValueError("'credentials' %r must be a Credentials instance" % credentials)
         if server and service_endpoint:
@@ -61,6 +61,7 @@ class Configuration(object):
         self.auth_type = auth_type
         self.version = version
         self.retry_policy = retry_policy
+        self.verify = verify
 
     @threaded_cached_property
     def server(self):

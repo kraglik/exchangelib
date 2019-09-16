@@ -280,7 +280,7 @@ class Protocol(with_metaclass(CachingProtocol, BaseProtocol)):
         if self.config.auth_type is None:
             name = str(self.credentials) if self.credentials and str(self.credentials) else 'DUMMY'
             self.config.auth_type, version_hint = get_service_authtype(
-                service_endpoint=self.service_endpoint, versions=API_VERSIONS, name=name
+                service_endpoint=self.service_endpoint, versions=API_VERSIONS, name=name, verify=self.config.verify
             )
         else:
             version_hint = None

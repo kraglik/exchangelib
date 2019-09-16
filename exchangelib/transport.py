@@ -99,7 +99,7 @@ def get_auth_instance(auth_type, **kwargs):
     return model(**kwargs)
 
 
-def get_autodiscover_authtype(service_endpoint, data):
+def get_autodiscover_authtype(service_endpoint, data, verify=True):
     # First issue a HEAD request to look for a location header. This is the autodiscover HTTP redirect method. If there
     # was no redirect, continue trying a POST request with a valid payload.
     log.debug('Getting autodiscover auth type for %s', service_endpoint)
@@ -122,13 +122,13 @@ def get_autodiscover_authtype(service_endpoint, data):
             # Give this URL a chance with a POST request.
         try:
             r = s.post(url=service_endpoint, headers=DEFAULT_HEADERS.copy(), data=data, allow_redirects=False,
-                       timeout=AutodiscoverProtocol.TIMEOUT)
+                       timeout=AutodiscoverProtocol.TIMEOUT, verify=verify)
         except CONNECTION_ERRORS as e:
             raise TransportError(str(e))
     return _get_auth_method_from_response(response=r)
 
 
-def get_service_authtype(service_endpoint, versions, name):
+def get_service_authtype(service_endpoint, versions, name, verify=True):
     # Get auth type by tasting headers from the server. Only do POST requests. HEAD is too error prone, and some servers
     # are set up to redirect to OWA on all requests except POST to /EWS/Exchange.asmx
     log.debug('Getting service auth type for %s', service_endpoint)
@@ -141,7 +141,7 @@ def get_service_authtype(service_endpoint, versions, name):
             log.debug('Requesting %s from %s', data, service_endpoint)
             try:
                 r = s.post(url=service_endpoint, headers=DEFAULT_HEADERS.copy(), data=data, allow_redirects=False,
-                           timeout=BaseProtocol.TIMEOUT)
+                           timeout=BaseProtocol.TIMEOUT, verify=verify)
             except CONNECTION_ERRORS as e:
                 raise TransportError(str(e))
             try:

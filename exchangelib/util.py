@@ -574,7 +574,7 @@ except ImportError:
     pass
 
 
-def post_ratelimited(protocol, session, url, headers, data, allow_redirects=False, stream=False):
+def post_ratelimited(protocol, session, url, headers, data, allow_redirects=False, stream=False, verify=True):
     """
     There are two error-handling policies implemented here: a fail-fast policy intended for stand-alone scripts which
     fails on all responses except HTTP 200. The other policy is intended for long-running tasks that need to respect
@@ -653,7 +653,7 @@ Response data: %(xml_response)s
             r = DummyResponse(url=url, headers={}, request_headers=headers)
             try:
                 r = session.post(url=url, headers=headers, data=data, allow_redirects=False, timeout=protocol.TIMEOUT,
-                                 stream=stream)
+                                 stream=stream, verify=verify)
             except CONNECTION_ERRORS as e:
                 log.debug('Session %s thread %s: connection error POST\'ing to %s', session.session_id, thread_id, url)
                 r = DummyResponse(url=url, headers={'TimeoutException': e}, request_headers=headers)

@@ -133,6 +133,7 @@ class EWSService(object):
                 data=wrap(content=payload, version=api_version, account=account),
                 allow_redirects=False,
                 stream=self.streaming,
+                verify=self.protocol.config.verify
             )
             if self.streaming:
                 # Let 'requests' decode raw data automatically
