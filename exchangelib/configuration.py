@@ -8,6 +8,7 @@ from future.utils import python_2_unicode_compatible
 from .credentials import BaseCredentials
 from .protocol import Protocol, RetryPolicy, FailFast
 from .transport import AUTH_TYPE_MAP
+from .util import split_url
 from .version import Version
 
 log = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ class Configuration(object):
 
     """
     def __init__(self, credentials=None, server=None, service_endpoint=None, auth_type=None, version=None,
-                 retry_policy=None):
+                 retry_policy=None, verify=True):
         if not isinstance(credentials, (BaseCredentials, type(None))):
             raise ValueError("'credentials' %r must be a Credentials instance" % credentials)
         if server and service_endpoint:
@@ -53,13 +54,18 @@ class Configuration(object):
         if not isinstance(retry_policy, RetryPolicy):
             raise ValueError("'retry_policy' %r must be a RetryPolicy instance" % retry_policy)
         self.credentials = credentials
-        self.server = server
-        self.service_endpoint = service_endpoint
         if server:
             self.service_endpoint = 'https://%s/EWS/Exchange.asmx' % server
+        else:
+            self.service_endpoint = service_endpoint
         self.auth_type = auth_type
         self.version = version
         self.retry_policy = retry_policy
+        self.verify = verify
+
+    @threaded_cached_property
+    def server(self):
+        return split_url(self.service_endpoint)[1]
 
     @threaded_cached_property
     def protocol(self):

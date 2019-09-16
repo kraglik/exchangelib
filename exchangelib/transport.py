@@ -5,6 +5,7 @@ import logging
 
 import requests.auth
 import requests_ntlm
+import requests_oauthlib
 
 from .credentials import IMPERSONATION
 from .errors import UnauthorizedError, TransportError, RedirectError, RelativeRedirect
@@ -19,11 +20,13 @@ BASIC = 'basic'
 DIGEST = 'digest'
 GSSAPI = 'gssapi'
 SSPI = 'sspi'
+OAUTH2 = 'OAuth 2.0'
 
 AUTH_TYPE_MAP = {
     NTLM: requests_ntlm.HttpNtlmAuth,
     BASIC: requests.auth.HTTPBasicAuth,
     DIGEST: requests.auth.HTTPDigestAuth,
+    OAUTH2: requests_oauthlib.OAuth2,
     NOAUTH: None,
 }
 try:
@@ -44,11 +47,11 @@ DEFAULT_HEADERS = {'Content-Type': 'text/xml; charset=%s' % DEFAULT_ENCODING, 'A
 
 
 def extra_headers(account):
+    """Generate extra HTTP headers
     """
-    Generate extra headers for impersonation requests. See
-    https://blogs.msdn.microsoft.com/webdav_101/2015/05/11/best-practices-ews-authentication-and-access-issues/
-    """
-    if account and account.access_type == IMPERSONATION:
+    if account:
+        # See
+        # https://blogs.msdn.microsoft.com/webdav_101/2015/05/11/best-practices-ews-authentication-and-access-issues/
         return {'X-AnchorMailbox': account.primary_smtp_address}
     return None
 
@@ -80,7 +83,7 @@ def wrap(content, version, account=None):
     return xml_to_str(envelope, encoding=DEFAULT_ENCODING, xml_declaration=True)
 
 
-def get_auth_instance(credentials, auth_type):
+def get_auth_instance(auth_type, **kwargs):
     """
     Returns an *Auth instance suitable for the requests package
     """
@@ -91,19 +94,12 @@ def get_auth_instance(credentials, auth_type):
         # Kerberos auth relies on credentials supplied via a ticket available externally to this library
         return model()
     if auth_type == SSPI:
-        # SSPI auth does not require credentials
-        if credentials is None:
-            return model()
-        return model(username=credentials.username, password=credentials.password)
-    if not credentials:
-        raise ValueError('Auth type %r requires credentials' % auth_type)
-    username = credentials.username
-    if auth_type == NTLM and credentials.type == credentials.EMAIL:
-        username = '\\' + username
-    return model(username=username, password=credentials.password)
+        # SSPI auth does not require credentials, but can have it
+        return model(**kwargs)
+    return model(**kwargs)
 
 
-def get_autodiscover_authtype(service_endpoint, data):
+def get_autodiscover_authtype(service_endpoint, data, verify=True):
     # First issue a HEAD request to look for a location header. This is the autodiscover HTTP redirect method. If there
     # was no redirect, continue trying a POST request with a valid payload.
     log.debug('Getting autodiscover auth type for %s', service_endpoint)
@@ -126,25 +122,13 @@ def get_autodiscover_authtype(service_endpoint, data):
             # Give this URL a chance with a POST request.
         try:
             r = s.post(url=service_endpoint, headers=DEFAULT_HEADERS.copy(), data=data, allow_redirects=False,
-                       timeout=AutodiscoverProtocol.TIMEOUT)
+                       timeout=AutodiscoverProtocol.TIMEOUT, verify=verify)
         except CONNECTION_ERRORS as e:
             raise TransportError(str(e))
     return _get_auth_method_from_response(response=r)
 
 
-def get_docs_authtype(docs_url):
-    # Get auth type by tasting headers from the server. Don't do HEAD requests. It's too error prone.
-    log.debug('Getting docs auth type for %s', docs_url)
-    from .protocol import BaseProtocol
-    try:
-        with BaseProtocol.raw_session() as s:
-            r = s.get(url=docs_url, headers=DEFAULT_HEADERS.copy(), allow_redirects=False, timeout=BaseProtocol.TIMEOUT)
-    except CONNECTION_ERRORS as e:
-        raise TransportError(str(e))
-    return _get_auth_method_from_response(response=r)
-
-
-def get_service_authtype(service_endpoint, versions, name):
+def get_service_authtype(service_endpoint, versions, name, verify=True):
     # Get auth type by tasting headers from the server. Only do POST requests. HEAD is too error prone, and some servers
     # are set up to redirect to OWA on all requests except POST to /EWS/Exchange.asmx
     log.debug('Getting service auth type for %s', service_endpoint)
@@ -157,7 +141,7 @@ def get_service_authtype(service_endpoint, versions, name):
             log.debug('Requesting %s from %s', data, service_endpoint)
             try:
                 r = s.post(url=service_endpoint, headers=DEFAULT_HEADERS.copy(), data=data, allow_redirects=False,
-                           timeout=BaseProtocol.TIMEOUT)
+                           timeout=BaseProtocol.TIMEOUT, verify=verify)
             except CONNECTION_ERRORS as e:
                 raise TransportError(str(e))
             try:

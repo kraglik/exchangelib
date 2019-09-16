@@ -94,8 +94,8 @@ fails to install.
 ## Setup and connecting
 
 ```python
-from exchangelib import DELEGATE, IMPERSONATION, Account, Credentials, FaultTolerance, \
-    Configuration, NTLM, GSSAPI, SSPI, Build, Version
+from exchangelib import DELEGATE, IMPERSONATION, Account, Credentials, OAuth2Credentials, \
+    FaultTolerance, Configuration, NTLM, GSSAPI, SSPI, OAUTH2, Build, Version
 
 # Specify your credentials. Username is usually in WINDOMAIN\username format, where WINDOMAIN is
 # the name of the Windows Domain your username is connected to, but some servers also
@@ -157,9 +157,13 @@ config = Configuration(
 config = Configuration(retry_policy=FaultTolerance(max_wait=3600), credentials=credentials)
 account = Account(primary_smtp_address='john@example.com', config=config)
 
-# Kerberos and SSPI authentication are supported via the 'gssapi' and 'sspi' auth types.
+# Kerberos and SSPI authentication are supported via the GSSAPI and SSPI auth types.
 config = Configuration(server='example.com', auth_type=GSSAPI)
 config = Configuration(server='example.com', auth_type=SSPI)
+
+# OAuth is supported via the OAUTH2 auth type and the OAuth2Credentials class.
+credentials = OAuth2Credentials(client_id='MY_ID', client_secret='MY_SECRET', tenant_id='TENANT_ID')
+config = Configuration(credentials=credentials, auth_type=OAUTH2)
 
 # If you're connecting to the same account very often, you can cache the autodiscover result for
 # later so you can skip the autodiscover lookup:
@@ -1183,6 +1187,31 @@ MSDN page for the corresponding XML element.
 from exchangelib import CalendarItem
 print(CalendarItem.__doc__)
 ```
+
+
+# Tests
+
+The test suite is split into unit tests, and integration tests that require a real Exchange
+server. If you want to run the full test suite, you must provide setup parameters for
+a test account. Copy `settings.yml.sample` to `settings.yml` and change the default
+parameters. If a `settings.yml` is available, we will run the entire test suite. Otherwise,
+just the unit tests are run.
+
+*WARNING*: The test account should not contain valuable data. The tests try hard to no touch
+existing data in the account, but accidents happen.
+
+You can run either the entire test suite or individual tests.
+
+```bash
+# Full test suite
+python setup.py test
+
+# Single test class or test case
+python tests/__init__.py FolderTest.test_refresh
+# Or, if you don't want extreme levels of debug output:
+python tests/__init__.py FolderTest.test_refresh -q
+```
+
 
 # Notes
 
